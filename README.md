@@ -102,86 +102,46 @@ I used **LangGraph** to build a structured AI flow (`backend-fastapi/app/service
 
 ## 🛠️ Setup & Running the Project
 
-This project includes a full React frontend, a FastAPI backend, and multiple database dependencies. Follow these instructions to run the entire system locally.
+## 🛠️ Setup & Running the Project
 
-### 1. System Requirements & Prerequisites
-Before starting, ensure you have the following installed on your machine:
-- **Python 3.10+** (Required for asynchronous LangGraph execution)
-- **Node.js 18+** (Required to compile the React/Vite admin dashboard)
-- **Docker** (Required to run the Qdrant Vector database locally)
-- **MongoDB** (You need a free MongoDB Atlas cluster URI, or a local MongoDB instance running on port 27017)
+This project includes a full React frontend, a FastAPI backend, and multiple database dependencies (MongoDB and Qdrant). Thanks to Docker Compose, you can launch the entire ecosystem with a single command.
 
-### 2. Booting the Databases
-The AI relies heavily on vector search and relational memory.
+### 1. Prerequisites
+- **Docker & Docker Compose** installed on your machine.
+- An active **Google Gemini API Key**.
 
-**Start Qdrant (Vector DB):**
+### 2. Configuration
+Clone the repository and set up your environment variables:
 ```bash
-# Pull and run the official Qdrant image via Docker
-docker run -p 6333:6333 -p 6334:6334 \
-    -v $(pwd)/qdrant_storage:/qdrant/storage:z \
-    qdrant/qdrant
+cp backend-fastapi/.env.example backend-fastapi/.env
 ```
-*Qdrant is now running locally at `http://localhost:6333`.*
-
-### 3. Backend Setup (FastAPI & AI Engine)
-The backend manages the LangGraph state machine, the Gemini API calls, and the WebSocket connections.
-
-```bash
-# 1. Navigate to the backend directory
-cd backend-fastapi
-
-# 2. Create and activate a Python virtual environment
-python3 -m venv .venv
-source .venv/bin/activate  # On Windows use: .venv\Scripts\activate
-
-# 3. Install core backend dependencies and AI packages
-pip install -r requirements.txt
-pip install -r requirements-ai.txt
-
-# 4. Configure Environment Variables
-cp .env.example .env
-```
-
-Open the `.env` file and strictly set the following:
+Open `backend-fastapi/.env` and add your Gemini API Key:
 ```env
 GEMINI_API_KEY=your_actual_google_gemini_key_here
 GEMINI_MODEL=gemini-3.1-flash-lite-preview
-MONGODB_URI=mongodb://localhost:27017/closira  # Or your MongoDB Atlas URI
-QDRANT_URL=http://localhost:6333
+```
+*(Note: You do not need to configure the MongoDB or Qdrant URLs; Docker Compose automatically links the internal container networking!)*
+
+### 3. One-Click Boot
+From the root of the repository, simply run:
+```bash
+docker compose up --build -d
 ```
 
-**Start the API Server:**
-```bash
-# Start the FastAPI REST server and Socket.io engine
-python3 run.py
-```
-*The API is now alive at `http://localhost:5001`. You can view the Swagger documentation at `http://localhost:5001/docs`.*
+This will automatically:
+1. Pull and boot **MongoDB** and **Qdrant** with persistent volumes.
+2. Build and boot the **FastAPI AI Backend** at `http://localhost:5001`.
+3. Build and boot the **React Admin Dashboard** at `http://localhost:5173`.
 
 ### 4. Background Workers (Optional)
-If you want to test the autonomous email polling feature (where the AI reads and replies to incoming support emails):
-
-1. Add your Google Workspace `SMTP_EMAIL` and `SMTP_APP_PASSWORD` to the `.env` file.
-2. Open a *new* terminal window, activate the virtual environment, and run the daemon:
+If you want to test the autonomous email polling feature (where the AI reads and replies to incoming support emails), add your Google Workspace `SMTP_EMAIL` and `SMTP_APP_PASSWORD` to the `.env` file, and then run the daemon in a separate terminal:
 ```bash
 cd backend-fastapi
+python3 -m venv .venv
 source .venv/bin/activate
+pip install -r requirements.txt
 python3 -m app.services.email_agent
 ```
-
-### 5. Frontend Setup (Admin Live Dashboard)
-The React dashboard is where human agents accept escalated tickets and take over live chats from the AI.
-
-```bash
-# 1. Open a new terminal and navigate to the frontend directory
-cd frontend
-
-# 2. Install Node modules
-npm install
-
-# 3. Start the Vite development server
-npm run dev
-```
-*The Admin Dashboard is now running at `http://localhost:5173`.*
 
 ---
 
