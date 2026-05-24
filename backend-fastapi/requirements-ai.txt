@@ -1,0 +1,8 @@
+# Optional AI/ML extras (install only if needed and compatible with your Python version)
+langchain==0.3.25
+langchain-community==0.3.24
+langchain-google-genai==2.1.4
+transformers>=4.51.3
+# For Python 3.14+, choose a torch build available on your index.
+# If your index only exposes 2.9+ for py3.14, use one of those:
+torch>=2.9.0
