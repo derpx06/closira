@@ -50,7 +50,7 @@ When the LangGraph FSM emits a `needs_handoff: True` signal:
 ```mermaid
 graph TD
     %% Perimeter & Gateway
-    subgraph Multi-Channel Ingestion Layer
+    subgraph Ingestion [Multi-Channel Ingestion Layer]
         Web([Web Widget]) -->|REST / WebSockets| APIGateway[FastAPI Gateway]
         WA([WhatsApp Twilio API]) -->|POST Webhooks| APIGateway
         Email([Dual-Mode IMAP Agent]) -->|Async Polling| APIGateway
@@ -59,7 +59,7 @@ graph TD
     APIGateway -->|Normalize LeadState| Orchestrator{LangGraph State Machine}
     
     %% Core Orchestration Engine
-    subgraph Core Orchestration (LangGraph FSM)
+    subgraph Orchestration [Core Orchestration LangGraph FSM]
         Orchestrator -->|State: Query + History| IntentNode[Intent Classification Node]
         IntentNode -->|JSON: intent, sentiment| Router{Dynamic Router}
         
@@ -73,7 +73,7 @@ graph TD
     end
 
     %% RAG Pipeline
-    subgraph Multi-Tenant Knowledge Engine
+    subgraph Knowledge [Multi-Tenant Knowledge Engine]
         RAGNode --> VectorDB[(Qdrant Hybrid Vector DB)]
         
         VectorDB -.->|RRF Fusion| Dense(Dense Vectors: MiniLM-L6)
@@ -93,7 +93,7 @@ graph TD
     Generative --> ReturnToUser
 
     %% Handoff Pipeline
-    subgraph Live Action Pipeline
+    subgraph Action [Live Action Pipeline]
         EscalateNode -->|Extract Sentiment| Triage[Priority Triage Engine]
         Triage -->|Persist Ticket| Mongo[(MongoDB Clusters)]
         Triage -->|Broadcast Event| SocketIO((Socket.io Emitter))
