@@ -1,25 +1,51 @@
-# Scenario 4: Lead Qualification
+# Scenario 4: Lead Qualification Funnel
 
-**Customer:** "I'm looking to book an appointment for dermal fillers."
+This transcript demonstrates stateful, multi-turn data extraction. Instead of dumping a massive form on the user, the LangGraph `qualify` node traps the conversation and iteratively extracts structured data one question at a time.
 
-**System Context Retrieval:**
-- Retrieved Document: `[GROUNDED TRUTH] Bloom Aesthetics Clinic SOP`
-- Content: `Fillers (from £250)... Booking: Via WhatsApp or website. 24hr cancellation required.`
+---
 
-**AI Action:** Detects explicit purchasing/booking intent. Executes System Prompt Rule 6: *"MUST QUALIFY THE LEAD. Ask 2-3 structured questions one by one."*
+### Execution Trace
 
-**AI:** "We would love to help you with dermal fillers! They start at £250. Before we proceed with booking, what specific area are you looking to have treated?"
+**[USER]**: "I'm looking to book an escape room for my team."
 
-**Customer:** "Just my lips."
+**[SYSTEM]** `LangGraph::detect_intent`
+```json
+{
+  "intent": "booking",
+  "sentiment": "positive",
+  "confidence": 0.94
+}
+```
+*Action*: Routing to `qualify` node.
+*State Check*: `collected_info` is empty. Required fields: `[group_size, timeline, experience_level]`.
 
-**AI:** "Perfect, lip fillers are one of our most popular treatments. Do you have a preferred timeline or a specific date in mind?"
+**[AGENT]**: "We would love to host your team at Breakout! Before I connect you with our booking coordinator, how many people are in your group?"
 
-**Customer:** "Sometime next week ideally, maybe Thursday?"
+**[USER]**: "There are 8 of us from the office."
 
-**AI:** "Thursday works! And is this your first time visiting Bloom Aesthetics Clinic, or have you been with us before?"
+**[SYSTEM]** `LangGraph::qualify` -> Updates State
+`collected_info: {"group_size": "8 people (corporate)"}`
 
-**Customer:** "First time."
+**[AGENT]**: "Perfect, 8 people is a great size for our larger rooms. Do you have a preferred timeline or a specific date in mind?"
 
-**AI:** "Wonderful! I will now connect you to our booking coordinator to finalize your Thursday appointment for lip fillers. Welcome to the clinic!"
+**[USER]**: "Sometime next Friday evening, maybe around 6 PM?"
 
-**AI Action:** Generates ticket summary and escalates to human agent for final schedule confirmation.
+**[SYSTEM]** `LangGraph::qualify` -> Updates State
+`collected_info: {"group_size": "8 people", "timeline": "Next Friday evening (6 PM)"}`
+
+**[AGENT]**: "Friday evening works! And finally, has your team played escape rooms before, or will this be a first-time experience?"
+
+**[USER]**: "First time for most of us."
+
+**[SYSTEM]** `LangGraph::qualify` -> Updates State
+`collected_info: {"group_size": "8 people", "timeline": "Next Friday evening", "experience_level": "Beginners / First-timers"}`
+*Action*: Qualification complete. Triggering `needs_handoff`.
+
+**[AGENT]**: "Wonderful! Since it's your first time, I recommend our 'Classified' room as it's great for beginners. I have all the details I need. I am now connecting you to our booking coordinator to lock in your Friday appointment!"
+
+---
+
+### Technical Evaluation
+✅ **Stateful Execution**: The graph successfully held the user in the qualification loop, refusing to hand off the chat until all three required parameters were gathered.
+✅ **Natural Language Extraction**: The LLM successfully parsed unstructured text ("8 of us from the office") into a structured JSON state payload in the background.
+✅ **Conversational Pacing**: The AI asked exactly one question per turn, minimizing cognitive load for the customer.

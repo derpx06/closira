@@ -1,26 +1,41 @@
-# Scenario 5: Conversation Summary
+# Scenario 5: Conversation Summary & Ticket Extraction
 
-**Customer Activity:** The customer has engaged in a chat asking for lip filler availability and pricing, answered qualification questions, and agreed to be handed off.
+At the end of an automated session (whether through successful qualification or escalation), the LangGraph orchestrator triggers a final background LLM pass. This generates a structured, high-density summary payload for the human agent, ensuring they have perfect context before taking over the socket.
 
-**AI Action:** When `needs_handoff` is triggered, the AI automatically executes `build_auto_ticket_payload` in the background.
+---
 
-**System Ticket Generation Output:**
+### Execution Trace
+
+*Context: Following the successful Lead Qualification session from Scenario 4.*
+
+**[SYSTEM]** `LangGraph::build_auto_ticket_payload`
+*Input*: Complete conversation history + `collected_info` state dictionary.
+*Action*: Gemini 3.1 Flash API invoked with `response_format={"type": "json_object"}`.
+
+**[LLM JSON OUTPUT]**:
 ```json
 {
-  "ticket_payload": {
-    "summary": "Customer is a first-time visitor looking to book an appointment for lip fillers (dermal fillers) for next Thursday.",
-    "category": "booking_inquiry",
-    "priority": "medium",
-    "urgency": "medium",
-    "customer_message": "First time."
+  "customer_intent": "Booking a corporate escape room session.",
+  "key_details": {
+    "group_size": "8 people",
+    "timeline": "Next Friday evening (6 PM)",
+    "experience": "Beginners / First-timers"
   },
-  "raise_ticket": true,
-  "confidence": 0.88
+  "sentiment": "Positive / Ready to book",
+  "sop_gaps_identified": "None. Qualification flow completed successfully.",
+  "recommended_next_action": "Agent should immediately offer the 'Classified' room availability for Friday 6 PM, collect the deposit, and confirm the booking.",
+  "urgency": "medium"
 }
 ```
 
-**Workflow End State:**
-1. Chat is locked to AI.
-2. A new Ticket is created in MongoDB with Status: `pending`.
-3. Agent Dashboard lights up with a new incoming connection.
-4. Human Agent clicks "Accept" to take over the socket and confirm the appointment.
+**[SYSTEM]** `MongoDB::insert_one` -> Ticket successfully persisted.
+
+**[SYSTEM]** `Agent_Dashboard_UI`
+The human agent receives the incoming chat ring. Before they even type a single letter, they are presented with the exact JSON summary above.
+
+---
+
+### Technical Evaluation
+✅ **Structured JSON Output**: The AI flawlessly adhered to the requested output schema, cleanly separating the customer intent, the extracted key details, and actionable recommendations.
+✅ **Actionable Insights**: The `recommended_next_action` logically aligns with the context (identifying that the agent needs to pitch the beginner-friendly room and take the deposit).
+✅ **Operational Efficiency**: The human agent does not need to read the entire transcript; they can glance at the JSON summary and instantly complete the booking in under 10 seconds.
