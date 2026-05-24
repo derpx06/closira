@@ -1,0 +1,62 @@
+version: "3.8"
+
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: closira_mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: closira_qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend-fastapi
+      dockerfile: Dockerfile
+    container_name: closira_backend
+    ports:
+      - "5001:5001"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017/closira
+      - QDRANT_URL=http://qdrant:6333
+      - GEMINI_MODEL=gemini-3.1-flash-lite-preview
+    env_file:
+      - ./backend-fastapi/.env
+    depends_on:
+      - mongodb
+      - qdrant
+    restart: unless-stopped
+    volumes:
+      - ./backend-fastapi:/app
+      - /app/.venv
+      - /app/__pycache__
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: closira_frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    volumes:
+      - ./frontend:/app/frontend
+      - ./chatbot-package:/app/chatbot-package
+      - /app/frontend/node_modules
+
+volumes:
+  mongodb_data:
+  qdrant_data:
