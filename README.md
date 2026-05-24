@@ -102,38 +102,98 @@ I used **LangGraph** to build a structured AI flow (`backend-fastapi/app/service
 
 ## 🛠️ Setup & Running the Project
 
-You can test the logic using the simple CLI demo, or boot up the full API backend!
+This project includes a full React frontend, a FastAPI backend, and multiple database dependencies. Follow these instructions to run the entire system locally.
 
-### 1. Prerequisites
-- Python 3.10+
-- Node.js 18+ (for the frontend)
-- An active Google Gemini API Key
+### 1. System Requirements & Prerequisites
+Before starting, ensure you have the following installed on your machine:
+- **Python 3.10+** (Required for asynchronous LangGraph execution)
+- **Node.js 18+** (Required to compile the React/Vite admin dashboard)
+- **Docker** (Required to run the Qdrant Vector database locally)
+- **MongoDB** (You need a free MongoDB Atlas cluster URI, or a local MongoDB instance running on port 27017)
 
-### 2. Installation
+### 2. Booting the Databases
+The AI relies heavily on vector search and relational memory.
+
+**Start Qdrant (Vector DB):**
 ```bash
+# Pull and run the official Qdrant image via Docker
+docker run -p 6333:6333 -p 6334:6334 \
+    -v $(pwd)/qdrant_storage:/qdrant/storage:z \
+    qdrant/qdrant
+```
+*Qdrant is now running locally at `http://localhost:6333`.*
+
+### 3. Backend Setup (FastAPI & AI Engine)
+The backend manages the LangGraph state machine, the Gemini API calls, and the WebSocket connections.
+
+```bash
+# 1. Navigate to the backend directory
 cd backend-fastapi
+
+# 2. Create and activate a Python virtual environment
 python3 -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate  # On Windows use: .venv\Scripts\activate
+
+# 3. Install core backend dependencies and AI packages
 pip install -r requirements.txt
 pip install -r requirements-ai.txt
-```
 
-### 3. Configuration
-Copy the environment template and add your Gemini key:
-```bash
+# 4. Configure Environment Variables
 cp .env.example .env
-# Edit .env and set GEMINI_API_KEY=your_key
-# Ensure GEMINI_MODEL=gemini-3.1-flash-lite-preview
 ```
 
-### 4. Running the Interactive Demo
-To fulfill the assignment's core testing requirements quickly, I built a terminal demo that runs the AI logic without needing to set up the databases:
+Open the `.env` file and strictly set the following:
+```env
+GEMINI_API_KEY=your_actual_google_gemini_key_here
+GEMINI_MODEL=gemini-3.1-flash-lite-preview
+MONGODB_URI=mongodb://localhost:27017/closira  # Or your MongoDB Atlas URI
+QDRANT_URL=http://localhost:6333
+```
+
+**Start the API Server:**
+```bash
+# Start the FastAPI REST server and Socket.io engine
+python3 run.py
+```
+*The API is now alive at `http://localhost:5001`. You can view the Swagger documentation at `http://localhost:5001/docs`.*
+
+### 4. Background Workers (Optional)
+If you want to test the autonomous email polling feature (where the AI reads and replies to incoming support emails):
+
+1. Add your Google Workspace `SMTP_EMAIL` and `SMTP_APP_PASSWORD` to the `.env` file.
+2. Open a *new* terminal window, activate the virtual environment, and run the daemon:
+```bash
+cd backend-fastapi
+source .venv/bin/activate
+python3 -m app.services.email_agent
+```
+
+### 5. Frontend Setup (Admin Live Dashboard)
+The React dashboard is where human agents accept escalated tickets and take over live chats from the AI.
 
 ```bash
+# 1. Open a new terminal and navigate to the frontend directory
+cd frontend
+
+# 2. Install Node modules
+npm install
+
+# 3. Start the Vite development server
+npm run dev
+```
+*The Admin Dashboard is now running at `http://localhost:5173`.*
+
+---
+
+## 🚀 Testing the Assignment Requirements
+If you just want to quickly test the core AI logic (FAQ, Lead Qual, Escalation) for the assignment without setting up Docker or MongoDB, I built a headless CLI demo:
+
+```bash
+cd backend-fastapi
+source .venv/bin/activate
 # Run the interactive terminal chatbot
 PYTHONPATH=. python3 cli_demo.py
 ```
-*(You can also run `PYTHONPATH=. python3 app/tests/test_lead_graph.py` to see automated background tests).*
 
 ---
 
