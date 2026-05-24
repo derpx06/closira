@@ -1,0 +1,54 @@
+{
+  "name": "chatbot-package",
+  "version": "1.0.0",
+  "description": "Embeddable floating chatbot widget for websites",
+  "type": "module",
+  "main": "./dist/chatbot-package.umd.cjs",
+  "module": "./dist/chatbot-package.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/chatbot-package.js",
+      "require": "./dist/chatbot-package.umd.cjs"
+    }
+  },
+  "bin": {
+    "supporthub": "./bin/chatbot-package.js"
+  },
+  "files": [
+    "dist",
+    "bin"
+  ],
+  "scripts": {
+    "build": "vite build && tsc -p tsconfig.build.json",
+    "cli": "node ./bin/chatbot-package.js",
+    "lint": "eslint ."
+  },
+  "keywords": [
+    "chatbot",
+    "widget",
+    "floating-chat",
+    "npm-package"
+  ],
+  "license": "GPL-3.0-only",
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@types/node": "^24.12.0",
+    "eslint": "^9.39.4",
+    "globals": "^17.4.0",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.57.0",
+    "vite": "^8.0.1"
+  },
+  "dependencies": {
+    "@inquirer/prompts": "^7.10.1",
+    "boxen": "^8.0.1",
+    "chalk": "^5.6.2",
+    "figlet": "^1.9.4",
+    "gradient-string": "^3.0.0",
+    "lucide": "^1.7.0",
+    "ora": "^9.0.0",
+    "socket.io-client": "^4.8.3"
+  }
+}
