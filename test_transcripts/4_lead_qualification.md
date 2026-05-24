@@ -1,51 +1,33 @@
 # Scenario 4: Lead Qualification Funnel
 
-This transcript demonstrates stateful, multi-turn data extraction. Instead of dumping a massive form on the user, the LangGraph `qualify` node traps the conversation and iteratively extracts structured data one question at a time.
+This transcript demonstrates the LangGraph `qualify` node in action. The AI engages in a long, natural conversation, steadily extracting the required structured data points (group size, date, experience level) without breaking character.
 
 ---
 
-### Execution Trace
+**Customer:** "Hi, I'm thinking of bringing my corporate team in for a team-building exercise."
 
-**[USER]**: "I'm looking to book an escape room for my team."
+**[SYSTEM LOG]** `LangGraph::detect_intent -> Intent: Booking. Routing to Qualification Funnel.`
 
-**[SYSTEM]** `LangGraph::detect_intent`
-```json
-{
-  "intent": "booking",
-  "sentiment": "positive",
-  "confidence": 0.94
-}
-```
-*Action*: Routing to `qualify` node.
-*State Check*: `collected_info` is empty. Required fields: `[group_size, timeline, experience_level]`.
+**AI:** "Hello! Breakout is perfect for corporate team building. We host companies all the time! Before I connect you with our corporate booking coordinator, could you tell me roughly how many people will be in your group?"
 
-**[AGENT]**: "We would love to host your team at Breakout! Before I connect you with our booking coordinator, how many people are in your group?"
+**Customer:** "We have about 15 people in our department. Is that too many for one room?"
 
-**[USER]**: "There are 8 of us from the office."
+**[SYSTEM LOG]** `State Update: {"group_size": "15 people"}`
 
-**[SYSTEM]** `LangGraph::qualify` -> Updates State
-`collected_info: {"group_size": "8 people (corporate)"}`
+**AI:** "Not to worry! 15 people is a great size. While our maximum for a single room is usually 8, we can easily split your team across two identical rooms so they can race against each other simultaneously! Do you have a specific date or timeline in mind for the event?"
 
-**[AGENT]**: "Perfect, 8 people is a great size for our larger rooms. Do you have a preferred timeline or a specific date in mind?"
+**Customer:** "Oh racing sounds awesome! We are looking at next Friday, probably around 3 PM so we can leave the office early."
 
-**[USER]**: "Sometime next Friday evening, maybe around 6 PM?"
+**[SYSTEM LOG]** `State Update: {"timeline": "Next Friday at 3 PM"}`
 
-**[SYSTEM]** `LangGraph::qualify` -> Updates State
-`collected_info: {"group_size": "8 people", "timeline": "Next Friday evening (6 PM)"}`
+**AI:** "Friday at 3 PM is a perfect time to end the workweek. One last question: have most of the people on your team played escape rooms before, or will this be a totally new experience for them?"
 
-**[AGENT]**: "Friday evening works! And finally, has your team played escape rooms before, or will this be a first-time experience?"
+**Customer:** "A couple of the managers have, but for the vast majority of the team, this will be their first time."
 
-**[USER]**: "First time for most of us."
+**[SYSTEM LOG]** `State Update: {"experience_level": "Mostly beginners/first-timers"}`
 
-**[SYSTEM]** `LangGraph::qualify` -> Updates State
-`collected_info: {"group_size": "8 people", "timeline": "Next Friday evening", "experience_level": "Beginners / First-timers"}`
-*Action*: Qualification complete. Triggering `needs_handoff`.
+**AI:** "That's wonderful! Escape rooms are an incredible bonding experience for beginners. Since I have all the details—15 people, next Friday at 3 PM, and mostly beginners—I am going to connect you directly to our corporate event coordinator. They can lock in those identical racing rooms for you right now!"
 
-**[AGENT]**: "Wonderful! Since it's your first time, I recommend our 'Classified' room as it's great for beginners. I have all the details I need. I am now connecting you to our booking coordinator to lock in your Friday appointment!"
+**Customer:** "Awesome, let's do it."
 
----
-
-### Technical Evaluation
-✅ **Stateful Execution**: The graph successfully held the user in the qualification loop, refusing to hand off the chat until all three required parameters were gathered.
-✅ **Natural Language Extraction**: The LLM successfully parsed unstructured text ("8 of us from the office") into a structured JSON state payload in the background.
-✅ **Conversational Pacing**: The AI asked exactly one question per turn, minimizing cognitive load for the customer.
+**[SYSTEM LOG]** `LangGraph::qualify -> Complete. Trigger Handoff to Human.`

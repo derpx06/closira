@@ -1,45 +1,33 @@
 # Scenario 3: Escalation Trigger (Complaint/Sentiment)
 
-This transcript highlights the deterministic routing of the LangGraph orchestrator. It showcases how the system prioritizes customer satisfaction by instantly bypassing the AI when strict SOP escalation rules or negative sentiments are detected.
+This transcript shows how a conversation can quickly shift from neutral to negative, and how the LangGraph orchestrator intercepts the negative sentiment to trigger an immediate human escalation.
 
 ---
 
-### Execution Trace
+**Customer:** "Hi, I have a quick question about my booking for tomorrow."
 
-**[USER]**: "I came to the Koramangala branch yesterday and the puzzle mechanism in the Murder Mystery room was completely broken and ruined our game. I am very upset."
+**AI:** "Hello! I'd be happy to help with your booking. What seems to be the issue?"
 
-**[SYSTEM]** `LangGraph::detect_intent`
-```json
-{
-  "intent": "complaint",
-  "sentiment": "angry/frustrated",
-  "confidence": 0.98,
-  "escalation_flag": true,
-  "reason": "Explicit complaint regarding broken equipment and negative sentiment detected."
-}
-```
-*Action*: Bypass `rag_answer`. Route directly to `escalate` node.
+**Customer:** "Well, we booked the 'Classified' room for 4 people, but two of my friends just got incredibly sick and can't make it. So it's just two of us now."
 
-**[SYSTEM]** `Qdrant::rule_check`
-*Rule Matched*: `SOP - Escalate if: complaint, broken room, refund request`
+**AI:** "I'm sorry to hear your friends aren't feeling well! You can absolutely still play the room with just two people. We will simply adjust your final payment at the branch to reflect 2 players instead of 4."
 
-**[AGENT]**: "I am incredibly sorry to hear that your experience in the Murder Mystery room was ruined by a broken mechanism. This is absolutely not the standard at Breakout. I am locking my automated responses and connecting you to our branch manager immediately so they can make this right for you."
+**Customer:** "No, you don't understand. Two people isn't fun for us. We want to completely cancel and get our deposit back."
 
-**[SYSTEM]** `MongoDB::create_ticket`
-```json
-{
-  "status": "open",
-  "urgency": "CRITICAL",
-  "category": "service_complaint",
-  "summary": "Customer highly upset regarding broken puzzle mechanism in Murder Mystery room at Koramangala branch."
-}
-```
+**AI:** "I understand. Our standard policy requires a 24-hour notice for full cancellations and refunds. Since your booking is for tomorrow, I can help you reschedule the game to a different date for free so you don't lose your deposit!"
 
-**[SYSTEM]** `Socket.io::emit` -> `Flash Live Dashboard (Red Alert)`
+**Customer:** "Are you kidding me? They literally got hospitalized an hour ago. I'm not rescheduling, I want my money back right now. This is ridiculous customer service, I'm never coming back."
 
----
+**[SYSTEM LOG]** `LangGraph::detect_intent`
+*   `sentiment`: angry/frustrated
+*   `intent`: complaint (refund dispute)
+*   `escalation_flag`: true
 
-### Technical Evaluation
-✅ **Safety Compliance**: The AI strictly adhered to the SOP rule (`Escalate if: complaint`). It made zero attempts to argue with the customer or offer an unauthorized refund.
-✅ **Sentiment Detection**: The JSON extraction accurately categorized the user's distress and automatically upgraded the ticket urgency to `CRITICAL`.
-✅ **Workflow Integrity**: The graph immediately locked the AI generation loop, ensuring no further automated messages could frustrate the user.
+**AI:** "I am incredibly sorry for the frustration and for what your friends are going through. Please allow me to lock my automated responses and connect you directly to our branch manager right away. They have the authority to review this situation and handle your refund personally."
+
+**[SYSTEM LOG]** `MongoDB::create_ticket -> Urgency: CRITICAL`
+**[SYSTEM LOG]** `Socket.io::emit -> Flash Dashboard Red`
+
+**Customer:** "Fine. Tell them to hurry."
+
+*(Live Human Agent Takes Over the Socket)*

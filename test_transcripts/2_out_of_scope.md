@@ -1,39 +1,27 @@
 # Scenario 2: Out-of-Scope Fallback
 
-This transcript demonstrates the system's aggressive anti-hallucination mechanisms. When a user asks a question not explicitly covered in the SOP or scraped website data, the Verification Guard intercepts the request and gracefully hands off the conversation.
+This transcript demonstrates how the AI handles a multi-turn conversation where the user starts asking for services that Breakout does not offer. The AI gracefully fails and hands off without hallucinating.
 
 ---
 
-### Execution Trace
+**Customer:** "Hey, I saw your ad for group activities. We want to bring a massive group of 30 kids for a birthday party."
 
-**[USER]**: "Do you guys do laser tag or paintball at your Koramangala branch?"
+**AI:** "Hello! Yes, Breakout is a fantastic place for large birthday parties. We frequently host big groups and can split the kids across several of our immersive escape rooms so everyone gets to play at the same time. Are you looking to book this for a weekend?"
 
-**[SYSTEM]** `LangGraph::detect_intent`
-```json
-{
-  "intent": "general",
-  "sentiment": "curious",
-  "confidence": 0.91
-}
-```
-*Action*: Routing to `rag_answer` node.
+**Customer:** "Yeah, Saturday afternoon. But the kids get bored easily. Do you guys also have an indoor trampoline park attached? Or maybe laser tag?"
 
-**[SYSTEM]** `Qdrant::hybrid_search`
-*   **Query**: "Do you guys do laser tag or paintball at your Koramangala branch?"
-*   **Retrieved Chunk**: `[GROUNDED TRUTH] Breakout SOP - Escape rooms, mystery rooms, corporate team building in Koramangala.`
-*   **Vector Distance**: Dense (0.21) -> *BELOW CONFIDENCE THRESHOLD*
+**[SYSTEM LOG]** `Gemini::Verification_Guard -> Context Check: Missing 'trampoline' or 'laser tag'. Trigger Fallback.`
 
-**[SYSTEM]** `Gemini::Verification_Guard`
-*State Trigger*: Context does not contain information regarding 'laser tag' or 'paintball'.
-*Action*: Abort Generative Answer. Execute `Fallback_Extractive`. Flag `needs_handoff = True`.
+**AI:** "That sounds like a fun party! While we specialize exclusively in highly immersive, movie-styled escape rooms, we don't have trampolines or laser tag facilities on-site. The escape rooms themselves are usually thrilling enough to keep everyone fully engaged for the entire hour! Would you like to hear about our beginner-friendly rooms that are perfect for kids?"
 
-**[AGENT]**: "I don't have specific information regarding laser tag or paintball in our current offerings. Breakout specializes in immersive movie-styled escape rooms. Because I want to ensure you get perfectly accurate information about group activities, I am connecting you directly to one of our event coordinators!"
+**Customer:** "Ah okay. Well do you at least serve food? Like can we get a full catering menu with pizzas and a customized cake?"
 
-**[SYSTEM]** `Socket.io::emit`
-*Payload*: `{"event": "human_handoff_requested", "reason": "out_of_scope_query"}`
+**[SYSTEM LOG]** `Gemini::Verification_Guard -> Context Check: Missing 'catering menu' or 'customized cake'. Trigger Handoff.`
 
----
+**AI:** "I don't have the specific details about our current catering menus or custom cake options in my database. Since a 30-person birthday party is a major event, I want to make sure you get perfectly accurate information about our food packages. I am going to connect you directly to one of our dedicated party coordinators who can plan this out with you!"
 
-### Technical Evaluation
-✅ **Hallucination Prevention**: The LLM recognized the missing context and successfully refused to invent a laser tag facility or affirm a service Breakout does not explicitly offer.
-✅ **Graceful Degradation**: Instead of a robotic "I don't know", the agent framed the limitation positively (highlighting what they *do* offer) and seamlessly escalated to a human.
+**[SYSTEM LOG]** `Socket.io::emit -> human_handoff_requested (Reason: out_of_scope_query)`
+
+**Customer:** "Okay great, thanks."
+
+**AI:** "You're very welcome! Please hold on for just a moment while I transfer this chat to our party coordinator..."
