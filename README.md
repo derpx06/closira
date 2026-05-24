@@ -1,123 +1,159 @@
 # Closira AI Support Platform
 
-Closira is an **Autonomous AI Customer Support Platform** designed to act as a fully capable, multi-channel support agent for Small and Medium Businesses (SMBs). 
+Closira is an **Autonomous Multi-Tenant AI Customer Support Platform** designed for Small and Medium Businesses (SMBs). 
 
-It doesn't just answer questions; it crawls websites, digests knowledge into a multi-tenant vector database, aggressively qualifies sales leads using a deterministic state machine, operates across **Web, WhatsApp, and Email**, and instantly escalates to a live human agent if a customer is angry or requires a complex intervention.
-
----
-
-## 🧠 System Architecture & Data Flow
-
-### 1. Multi-Channel Ingestion
-The platform interacts with customers across three primary channels:
-*   **Web Widget (`chatbot-package`)**: An embeddable React/TS widget that sits on a customer's website, communicating via REST and maintaining persistent `Socket.io` connections for human handoffs.
-*   **WhatsApp (`app/api/v1/webhooks/whatsapp.py`)**: Integrates with the Twilio API to handle two-way conversational messaging on WhatsApp.
-*   **Dual-Mode Email Agent (`app/services/email_agent.py`)**: An asynchronous background worker that polls IMAP inboxes (supporting both OAuth and legacy App Passwords). It actively filters and processes "breakout" support tickets automatically.
-
-### 2. The Orchestrator (LangGraph State Machine)
-All messages (regardless of channel) funnel into `lead_graph.py`, a rigorous **Finite State Machine** built with LangGraph:
-1.  **Intent Detection Node**: Checks if the user is asking a general question, trying to book a service, or filing an angry complaint. It uses strict JSON-mode LLM extraction.
-2.  **Lead Qualification Node**: If the user wants to book/purchase, the State Machine traps them in a qualification funnel, asking targeted questions to gather required structured data before handing them off.
-3.  **RAG Node**: If they have a general question, it routes to the Knowledge Engine.
-
-### 3. The RAG Engine & Multi-Tenant Knowledge Base
-The system uses a **Hybrid Vector Search** via Qdrant to power the LLM (`rag_engine.py`):
-*   **Knowledge Ingestion**: Playwright crawls the admin-submitted URLs, an LLM strips the raw HTML into clean Markdown, and `indexer_service.py` chunks it.
-*   **Multi-Tenant Architecture**: Every company and website has strictly isolated collections (e.g., `ticket_knowledge_c5_w1`) to prevent cross-contamination of knowledge.
-*   **Dense Embeddings**: Uses a local `all-MiniLM-L6-v2` model for semantic understanding.
-*   **Sparse Embeddings (SPLADE)**: Uses `fastembed` for exact keyword matching (crucial for product numbers or specific nouns).
-*   **Anti-Hallucination Framework**: Uses **Reciprocal Rank Fusion (RRF)**. Additionally, "Grounded Truths" (facts manually added by an admin) are given massive rank boosts. The prompt strictly forces the LLM to provide exact sitemap URLs rather than inventing links, and relies on extractive fallbacks if the model goes off-script.
-
-### 4. The Intelligence Layer (Gemini 3.1 Flash Lite Preview)
-The entire intelligence backbone runs on Google's **Gemini 3.1 Flash Lite Preview**. 
-By utilizing Gemini's OpenAI-compatible API endpoint (`https://generativelanguage.googleapis.com/v1beta/openai/`), the platform natively utilizes the `openai` SDK to handle complex LangGraph JSON routing and dense Markdown generation without sacrificing speed.
-
-### 5. The Escalation Engine (Socket.io)
-If a user asks something out of scope, or if the `infer_sentiment` utility detects they are **Angry/Frustrated**, the `escalate` node fires:
-1.  **Ticket Generation**: A structured JSON payload is created with dynamic urgency (e.g., `CRITICAL`).
-2.  **Real-Time Handoff**: The backend emits a `Socket.io` event to the Agent Dashboard (`frontend`).
-3.  **Live Takeover**: The human agent's screen flashes. They click "Accept", locking the AI out, and taking over the conversation seamlessly in real-time.
+Far beyond a traditional chatbot, Closira operates as a fully autonomous digital employee. It autonomously crawls and digests business websites, manages isolated multi-tenant vector knowledge bases, aggressively qualifies inbound sales leads via deterministic finite state machines, operates natively across **Web, WhatsApp, and Email IMAP**, and instantly triggers real-time live human escalation pipelines when complex intervention is required.
 
 ---
 
-## 🏗️ Architecture Diagram
+## 🧠 Deep System Architecture & Data Flow
+
+The platform is designed around strict separation of concerns, utilizing an Event-Driven API Gateway, a Stateful Orchestration Engine (LangGraph), and a high-performance Vector Retrieval Engine.
+
+### 1. The Multi-Channel Ingestion & Gateway Layer
+The perimeter of the system handles asynchronous, heterogeneous inputs across different protocols:
+*   **Web Widget (`chatbot-package` & `api/v1/chat.py`)**: A lightweight, embeddable React/TypeScript widget deployed on client sites. It communicates via standard REST for inference, but establishes a persistent **WebSocket (Socket.io)** connection for real-time human-agent handoffs.
+*   **Twilio WhatsApp Webhooks (`api/v1/webhooks/whatsapp.py`)**: Subscribes to inbound Twilio POST webhooks. It maps phone numbers to specific tenant company IDs, transforming the WhatsApp payload into the internal graph state schema.
+*   **Dual-Mode Email Agent (`services/email_agent.py`)**: A resilient, asynchronous background worker (`asyncio.sleep` polling). It queries Gmail IMAP directly using `X-GM-RAW` filters to intercept specific support tickets (e.g., matching "breakout"). It supports both OAuth 2.0 and strict SMTP App Password authentication, decoupling the system from Google Cloud verification limits.
+
+### 2. The Deterministic Orchestrator (LangGraph FSM)
+Every inbound message, regardless of channel, is normalized into a `LeadState` dictionary and pushed into `services/lead_graph.py`. Unlike traditional LLM wrappers, Closira does not allow the model to directly answer the user; it forces the LLM through a strict **Finite State Machine**:
+
+1.  **Intent Classification (`detect_intent`)**: The graph passes the raw query and conversation history to Gemini 3.1 Flash Lite. Using `response_format={"type": "json_object"}`, it deterministically forces the LLM to output one of three strict categories (`booking`, `complaint`, or `general`), along with a sentiment score and emoji.
+2.  **Lead Qualification Funnel (`qualify`)**: If the intent is `booking`, the graph routes to the qualification loop. The LLM acts as a strict extraction engine, refusing to answer and instead asking sequential questions until the required structured data (e.g., date, time, group size) is collected in the graph state.
+3.  **Dynamic Escalation (`escalate`)**: If the intent is `complaint` or if sentiment drops to `angry`/`frustrated`, the graph bypasses knowledge retrieval entirely. It immediately tags the state with `needs_handoff: True`, halting the AI.
+4.  **RAG Node (`rag_answer`)**: Only if the intent is `general` does the state machine allow the query to pass into the Knowledge Engine.
+
+### 3. The Multi-Tenant RAG & Vector Pipeline
+When a query reaches `services/rag_engine.py`, it executes a multi-stage retrieval and generation pipeline:
+*   **Ingestion & Scraping**: When a tenant provisions a website, the backend spins up a headless Playwright Chromium instance. It maps the full domain (`crawler/map_next_routes.py`), scrapes raw HTML, and passes it to an LLM "Cleaner" (`services/ai_cleaner.py`) to strip noisy DOM elements (navbars, footers) into pure semantic Markdown.
+*   **Strict Multi-Tenancy**: Qdrant collections are dynamically provisioned per company and per website (`ticket_knowledge_c{company_id}_w{website_id}`). This mathematically guarantees zero cross-contamination of competitor data.
+*   **Hybrid RRF Search**: 
+    *   **Dense Embeddings**: Chunks are processed locally via `all-MiniLM-L6-v2` for semantic intent matching.
+    *   **Sparse Embeddings (SPLADE)**: Chunks are simultaneously processed via `fastembed` for lexical exact-keyword matching (crucial for SKUs or specific names).
+    *   **Reciprocal Rank Fusion (RRF)**: Qdrant fuses both vector spaces to retrieve the mathematically optimal context blocks.
+*   **Anti-Hallucination Fallbacks**: Grounded Truths (manual SOPs added by admins) receive massive mathematical rank boosts. If the retrieved context scores too low, or if the LLM's generated response triggers a "low confidence" heuristic, the system safely aborts generative answering and returns a strict Extractive Fallback directly from the source chunk.
+
+### 4. The Intelligence Backbone (Gemini 3.1 Flash Lite)
+The core inference pipeline is powered by Google's **Gemini 3.1 Flash Lite Preview**. By leveraging Gemini's OpenAI-compatible proxy layer (`https://generativelanguage.googleapis.com/v1beta/openai/`), the backend natively utilizes the `openai` Python SDK. This allows the system to execute massive parallel LangGraph JSON extraction tasks at ultra-low latency while maintaining a unified, vendor-agnostic SDK architecture.
+
+### 5. The Real-Time Escalation Pipeline
+When the LangGraph FSM emits a `needs_handoff: True` signal:
+1.  **Triage**: A structured ticket is generated in MongoDB (`db['tickets']`) with dynamic urgency profiling.
+2.  **Socket Emission**: The backend `socket_server.py` emits a payload to the Admin Dashboard.
+3.  **Live Takeover**: The dashboard flashes red. The human clicks "Accept", locking the AI Graph out of the session. The human's keystrokes are then piped bi-directionally over the active WebSocket directly into the end-user's Web Widget or WhatsApp thread.
+
+---
+
+## 🏗️ Deep Architecture & Component Diagram
 
 ```mermaid
 graph TD
-    %% Channels
-    Web([Web Widget]) -->|HTTP / Socket.io| API[FastAPI Gateway]
-    WA([WhatsApp / Twilio]) -->|Webhook| API
-    Email([IMAP Email Agent]) -->|Async Poll| API
+    %% Perimeter & Gateway
+    subgraph Multi-Channel Ingestion Layer
+        Web([Web Widget]) -->|REST / WebSockets| APIGateway[FastAPI Gateway]
+        WA([WhatsApp Twilio API]) -->|POST Webhooks| APIGateway
+        Email([Dual-Mode IMAP Agent]) -->|Async Polling| APIGateway
+    end
     
-    API -->|Route Query| Orchestrator{LangGraph Orchestrator}
+    APIGateway -->|Normalize LeadState| Orchestrator{LangGraph State Machine}
     
-    %% Intent Detection
-    Orchestrator -->|Detect Intent| IntentCheck{Intent == ?}
-    IntentCheck -->|Complaint| EscalateNode[Escalate Node]
-    IntentCheck -->|Booking| QualifyNode[Lead Qualify Node]
-    IntentCheck -->|Question| RAGNode[RAG Engine]
+    %% Core Orchestration Engine
+    subgraph Core Orchestration (LangGraph FSM)
+        Orchestrator -->|State: Query + History| IntentNode[Intent Classification Node]
+        IntentNode -->|JSON: intent, sentiment| Router{Dynamic Router}
+        
+        Router -->|intent == complaint| EscalateNode[Escalate / Handoff Node]
+        Router -->|intent == booking| QualifyNode[Lead Qualification Funnel]
+        Router -->|intent == general| RAGNode[Retrieval Augmented Generation]
+        
+        QualifyNode -->|Check state.collected_info| FunnelCheck{Data Complete?}
+        FunnelCheck -->|No: Emit Question| ReturnToUser[Return to User]
+        FunnelCheck -->|Yes: State Full| EscalateNode
+    end
 
-    %% Qualification Funnel
-    QualifyNode -->|Check State| Funnel{Missing Info?}
-    Funnel -->|Ask Question| UserChannel[User]
-    Funnel -->|Complete| EscalateNode
-
-    %% RAG Engine
-    RAGNode --> VectorDB[(Qdrant Vector DB)]
-    VectorDB -.->|RRF Fusion| Dense(Dense Vectors: MiniLM)
-    VectorDB -.->|RRF Fusion| Sparse(Sparse Vectors: SPLADE)
+    %% RAG Pipeline
+    subgraph Multi-Tenant Knowledge Engine
+        RAGNode --> VectorDB[(Qdrant Hybrid Vector DB)]
+        
+        VectorDB -.->|RRF Fusion| Dense(Dense Vectors: MiniLM-L6)
+        VectorDB -.->|RRF Fusion| Sparse(Sparse Vectors: SPLADE)
+        
+        Dense --> RAGNode
+        Sparse --> RAGNode
+        
+        RAGNode -->|Context + Prompt| LLM[Gemini 3.1 Flash Lite API]
+        
+        LLM --> Guard{Verification Guard}
+        Guard -->|Low Confidence / Ungrounded| Extractive[Extractive Source Fallback]
+        Guard -->|High Confidence| Generative[Generative Markdown Answer]
+    end
     
-    Dense --> RAGNode
-    Sparse --> RAGNode
-    
-    RAGNode --> LLM[Gemini 3.1 Flash Lite]
-    LLM --> FallbackCheck{Has Grounding?}
-    FallbackCheck -->|FAIL| Fallback[Extractive Fallback]
-    FallbackCheck -->|PASS| ReturnAnswer[Generative Answer]
+    Extractive --> ReturnToUser
+    Generative --> ReturnToUser
 
-    %% Escalation
-    EscalateNode -->|Sentiment Analysis| Triage[Dynamic Priority Triage]
-    Triage -->|Create Ticket| MongoDB[(MongoDB)]
-    Triage -->|Socket Emit| Dashboard[Admin Live Dashboard]
+    %% Handoff Pipeline
+    subgraph Live Action Pipeline
+        EscalateNode -->|Extract Sentiment| Triage[Priority Triage Engine]
+        Triage -->|Persist Ticket| Mongo[(MongoDB Clusters)]
+        Triage -->|Broadcast Event| SocketIO((Socket.io Emitter))
+        SocketIO --> LiveDashboard[Admin Live Dashboard UI]
+        LiveDashboard -->|Human Keystrokes| ReturnToUser
+    end
 ```
 
 ---
 
-## 📂 Repository Structure
+## 📂 Deep Repository Directory Structure
 
 ```text
 closira/
-├── backend-fastapi/        # The Intelligence & API Gateway
-│   ├── app/api/            # REST API Routes and Webhooks (Twilio/Gmail)
-│   ├── app/services/       # RAG, Crawlers, Email Polling, Graph State Machine
-│   ├── app/realtime/       # Socket.io server for Live Chat handoff
-│   └── tests/              # End-to-end simulation and validation tests
-├── frontend/               # The Admin & Live Agent Dashboard (React, Vite, Tailwind)
-├── chatbot-package/        # The Embeddable Web Widget UI code
-└── test_transcripts/       # Simulated conversations testing LangGraph routing
+├── backend-fastapi/               # Core Python Intelligence & Orchestration
+│   ├── app/
+│   │   ├── api/v1/                # REST API Routers
+│   │   │   ├── webhooks/          # Twilio WhatsApp Webhook Handlers
+│   │   │   ├── chat.py            # Public Widget Chat Endpoints
+│   │   │   └── integrations.py    # Gmail OAuth & SMTP Configurations
+│   │   ├── services/              # Core Business Logic & AI
+│   │   │   ├── lead_graph.py      # LangGraph State Machine Definition
+│   │   │   ├── rag_engine.py      # Gemini RAG Pipeline & Prompt Engineering
+│   │   │   ├── indexer_service.py # Playwright Scraping & Qdrant Upsertion
+│   │   │   └── email_agent.py     # Background IMAP Polling Daemon
+│   │   ├── realtime/              # Socket.io Live Handoff Server
+│   │   └── core/config.py         # Pydantic Settings & Environment Mgmt
+│   └── tests/                     # LangGraph Simulation & E2E Validation
+│
+├── frontend/                      # Admin & Agent Live Dashboard (React/Vite)
+│   ├── src/pages/dashboard/       # Connections, Ticket Inbox, Knowledge Mgmt
+│   └── src/services/              # Axios API bindings to FastAPI
+│
+├── chatbot-package/               # Embeddable Web Widget Library
+│   └── src/widget/                # Preact/React isolated chat interface
+│
+└── prompt_design.md               # Advanced System Prompt architecture definitions
 ```
 
 ---
 
-## 🛠️ Complete Setup & Execution Guide
+## 🛠️ Complete Detailed Setup Guide
 
-### 1. Prerequisites
-- **Python 3.10+** (For the FastAPI backend and AI pipelines)
-- **Node.js 18+** (For the React Dashboards)
-- **MongoDB** (Cloud Atlas or Local instance)
+### 1. Prerequisites & System Dependencies
+- **Python 3.10+** (Required for LangGraph and Async API compatibility)
+- **Node.js 18+** (Required for Vite and React compilation)
+- **MongoDB** (Cloud Atlas or Local instance for Relational Persistence)
 - **Qdrant Vector DB** (Must run locally on port `6333` via Docker, or configure a Cloud instance)
 
-### 2. Backend Initialization
-The backend relies on the `uv` package manager/runner, but standard `pip` can also be used.
+### 2. Backend Initialization & Execution
+The backend manages all AI inference, state graphs, and live sockets.
 
 ```bash
 cd backend-fastapi
 
-# 1. Setup Virtual Environment
+# 1. Initialize Python Virtual Environment
 python3 -m venv .venv
 source .venv/bin/activate
 
-# 2. Install Dependencies
+# 2. Install Core and AI Dependencies
 pip install -r requirements.txt
 pip install -r requirements-ai.txt
 
@@ -125,49 +161,53 @@ pip install -r requirements-ai.txt
 cp .env.example .env 
 ```
 
-**Inside your `.env` file, configure:**
-- `GEMINI_API_KEY`: Your Google Gemini API Key.
+**Critical `.env` Variables:**
+- `GEMINI_API_KEY`: Your Google Gemini API Key (Required for all inference).
+- `GEMINI_MODEL`: Must be set to `gemini-3.1-flash-lite-preview`.
 - `MONGODB_URI`: Your MongoDB connection string.
-- `QDRANT_URL`: URL to your Vector DB (e.g., `http://localhost:6333`).
+- `QDRANT_URL`: Local or Cloud URL to your Qdrant instance.
 
-**Run the Server:**
+**Start the API Gateway:**
 ```bash
-# Starts the FastAPI REST Server and Socket.io instances
+# Initializes the FastAPI REST Server and Socket.io Event Loop
 python3 run.py
 ```
-*The backend API and Swagger Docs will be available at `http://localhost:5001/docs`.*
+*The API and Swagger Docs will instantly boot at `http://localhost:5001/docs`.*
 
-**Run Background Workers (Optional):**
-If you have configured `SMTP_EMAIL` and `SMTP_APP_PASSWORD` in your `.env`, you can spin up the background email polling agent:
+**Start the Async Email Daemon (Optional):**
+If you have configured `SMTP_EMAIL` and `SMTP_APP_PASSWORD` in your `.env`, open a secondary terminal pane to start the IMAP polling engine:
 ```bash
+cd backend-fastapi
+source .venv/bin/activate
 python3 -m app.services.email_agent
 ```
 
-### 3. Dashboard Frontend Setup
-The admin dashboard allows you to manage knowledge bases, view leads, and interact with the Live Socket.
+### 3. Admin Dashboard Frontend Setup
+The admin dashboard is where the human agent interacts with the `Socket.io` server to intercept escalating FSM tickets.
 
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-*The dashboard will be available at `http://localhost:5173`.*
+*The dashboard UI will compile and serve at `http://localhost:5173`.*
 
-### 4. Testing the System
-You can simulate full AI pipeline queries without running the frontend by executing the built-in CLI tests:
+### 4. Running the Simulation Test Suite
+You can simulate the entire AI pipeline (LangGraph routing, Qdrant extraction, Gemini inference) completely headless using the built-in CLI suites:
 
 ```bash
 cd backend-fastapi
-# Tests the LangGraph Lead Qualification and Complaint Escalation routing
+
+# Test 1: Simulates an angry customer to verify LangGraph routes to the Escalation Node
 PYTHONPATH=. python3 app/tests/test_lead_graph.py
 
-# Tests the RAG retrieval pipeline and JSON responses
+# Test 2: Simulates a complex pricing query to verify Qdrant RRF retrieval and JSON schema
 PYTHONPATH=. python3 test_api_chat.py
 ```
 
 ---
 
-## ⚠️ Notes for Production Deployment
-1. **Model Cold Starts**: `fastembed` automatically downloads the SPLADE semantic models on first run. In a production container environment, these weights should be explicitly baked into your Docker image to prevent massive cold-start latency.
-2. **WebSocket Resilience**: The current `socket_server.py` handles Live Agent handoffs in-memory. For horizontal scaling across multiple instances, a Redis Pub/Sub adapter must be integrated into the Socket.io server configuration.
-3. **Email Rate Limiting**: The IMAP `email_agent.py` processes messages in batches of 5 to respect strict Google Workspace and personal Gmail rate limits. Adjust this ceiling carefully if migrating to high-volume enterprise ingestion.
+## ⚠️ Mission Critical Production Notes
+1. **Semantic Model Cold Starts**: The `fastembed` library dynamically downloads the `SPLADE` semantic models to disk on the very first run. In a production containerized environment (Kubernetes/Docker), these weights **must** be explicitly baked into your Docker image build step to prevent massive cold-start latency when scaling horizontal pods.
+2. **WebSocket Resilience & Pub/Sub**: The current `socket_server.py` implementation handles Live Agent handoffs using an in-memory event loop. To achieve horizontal scaling across multiple FastAPI instances, a **Redis Pub/Sub adapter** must be natively integrated into the Socket.io server configuration to synchronize handoff events across nodes.
+3. **Email Rate Limiting**: The IMAP `email_agent.py` processes inbound queues in batches of 5 to rigidly respect Google Workspace limits. If migrating to a high-volume enterprise inbox, adjust this ceiling carefully, and consider offloading polling to a distributed Celery/RabbitMQ task queue.
