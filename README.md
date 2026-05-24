@@ -8,13 +8,37 @@ Instead of a basic script, I built a complete **Multi-Tenant Autonomous Agent Ar
 
 ---
 
+## 🧠 System Architecture
+
+```mermaid
+graph TD
+    %% RAG Pipeline & Historical Context
+    subgraph Knowledge [Multi-Tenant Knowledge Engine]
+        RAGNode[Retrieval Augmented Generation] --> VectorDB[(Qdrant Hybrid Vector DB)]
+        RAGNode --> TicketDB[(Qdrant Ticket Vectors)]
+        
+        VectorDB -.->|RRF Fusion| Dense(Dense Vectors: MiniLM-L6)
+        VectorDB -.->|RRF Fusion| Sparse(Sparse Vectors: SPLADE)
+        TicketDB -.->|Context Injection| PastTickets(Similar Past Tickets)
+        
+        Dense --> RAGNode
+        Sparse --> RAGNode
+        PastTickets --> RAGNode
+        
+        RAGNode -->|Context + Tickets + Prompt| LLM[Gemini 3.1 Flash Lite API]
+    end
+```
+
+---
+
 ## 🎯 How I Met the Assignment Requirements
 
 I structured the core logic using **LangGraph** as a deterministic Finite State Machine (`backend-fastapi/app/services/lead_graph.py`). This guarantees the AI follows the 4 required stages without randomly drifting.
 
 ### 1. FAQ Answering (In-SOP Only)
 *   **The Approach**: Instead of dumping the SOP into a basic system prompt, I implemented a true **Hybrid RAG Pipeline** using Qdrant.
-*   **Safety**: I utilize Reciprocal Rank Fusion (Dense + Sparse embeddings) and explicit `[GROUNDED TRUTH]` labels for the SOPs. If a customer asks an out-of-scope question, the RAG engine explicitly fails gracefully with an extractive fallback, completely preventing hallucinations.
+*   **Anti-Hallucination Fallbacks**: Grounded Truths (manual SOPs added by admins) receive massive mathematical rank boosts. If the retrieved context scores too low, or if the LLM's generated response triggers a "low confidence" heuristic, the system safely aborts generative answering and returns a strict Extractive Fallback directly from the source chunk.
+*   **Historical Ticket Vectorization**: Past resolved tickets and escalations are continuously embedded into a separate `ticket_queries` Qdrant collection. When the AI processes a query, it dynamically fetches and injects highly-similar past issues (`[SIMILAR PAST TICKETS]`) into its prompt context, allowing it to learn from previous agent resolutions without explicitly treating them as hard-coded SOP facts.
 
 ### 2. Lead Qualification
 *   **The Approach**: If the LangGraph router detects a `booking` intent, it mathematically traps the user in a `qualify` node. The AI refuses to answer general questions until it extracts the required structured fields (e.g., treatment type, timeline) by asking exactly one clear question at a time.

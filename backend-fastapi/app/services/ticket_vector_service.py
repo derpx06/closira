@@ -60,23 +60,39 @@ class TicketVectorService:
         await self.init()
         dense_vector = self.embeddings.embed_query(query)
         sparse_vector = self.embeddings.embed_sparse_query(query)
-        results = await qdrant.query_points(
-            collection_name=settings.qdrant_tickets_collection,
-            prefetch=[
-                Prefetch(query=dense_vector, using="dense", limit=limit*2),
-                Prefetch(
-                    query=SparseVector(indices=sparse_vector['indices'], values=sparse_vector['values']),
-                    using="sparse",
-                    limit=limit*2
-                )
-            ],
-            query=FusionQuery.RRF,
-            limit=limit,
-            with_payload=True,
-            query_filter={'must': [{'key': 'companyId', 'match': {'value': company_id}}]},
-        )
-        scored_points = getattr(results, 'points', results)
-        return [{'ticketId': str((r.payload or {}).get('ticketId') or r.id), 'score': r.score or 0.0} for r in scored_points]
+        try:
+            results = await qdrant.query_points(
+                collection_name=settings.qdrant_tickets_collection,
+                prefetch=[
+                    Prefetch(query=dense_vector, using="dense", limit=limit*2),
+                    Prefetch(
+                        query=SparseVector(indices=sparse_vector['indices'], values=sparse_vector['values']),
+                        using="sparse",
+                        limit=limit*2
+                    )
+                ],
+                query=FusionQuery.RRF,
+                limit=limit,
+                with_payload=True,
+                query_filter={'must': [{'key': 'companyId', 'match': {'value': company_id}}]},
+            )
+            scored_points = getattr(results, 'points', results)
+        except Exception as e:
+            print(f"[TicketVectorService] RRF failed: {e}. Falling back to Dense search.")
+            results = await qdrant.search(
+                collection_name=settings.qdrant_tickets_collection,
+                query_vector=('dense', dense_vector),
+                limit=limit,
+                with_payload=True,
+                query_filter={'must': [{'key': 'companyId', 'match': {'value': company_id}}]},
+            )
+            scored_points = results
+        return [{
+            'ticketId': str((r.payload or {}).get('ticketId') or r.id),
+            'score': r.score or 0.0,
+            'message': (r.payload or {}).get('message', ''),
+            'category': (r.payload or {}).get('category', '')
+        } for r in scored_points]
 
     def _build_text(self, input_data: dict) -> str:
         category = input_data.get('category')

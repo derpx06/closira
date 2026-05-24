@@ -145,6 +145,21 @@ class RAGEngine:
         chat_history = self.history_by_session.get(history_key) or []
         history_text = '\n'.join([f"{m['role']}: {m['content']}" for m in chat_history[-self.MAX_CONTEXT_MESSAGES:]])
 
+        # 4.5 Similar Past Tickets
+        similar_tickets_text = ""
+        if company_id:
+            try:
+                from app.services.ticket_vector_service import ticket_vector_service
+                similar_tickets = await ticket_vector_service.search_tickets(company_id, query, limit=3)
+                tickets_list = []
+                for t in similar_tickets:
+                    if t.get('score', 0) > 0.35 and t.get('message'):
+                        tickets_list.append(f"- Past Issue: {t.get('message')}\n  Category: {t.get('category', 'unknown')}")
+                if tickets_list:
+                    similar_tickets_text = "SIMILAR PAST TICKETS (For context only):\n" + "\n".join(tickets_list) + "\n"
+            except Exception as e:
+                print(f"[RAGEngine] Error fetching similar tickets: {e}")
+
         # 5. Build grounded prompt (anti-hallucination rules)
         has_website_profile = "Website Label:" in website_profile_text
         has_context = bool(context_text.strip()) or has_website_profile
@@ -184,6 +199,7 @@ WEBSITE PROFILE CONTEXT (always follow these instructions):
 KNOWLEDGE BASE CONTEXT (answer ONLY from this):
 {context_section}
 
+{similar_tickets_text}
 CONVERSATION HISTORY:
 {history_text or "This is the first message."}
 
