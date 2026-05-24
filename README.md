@@ -1,4 +1,27 @@
 # Closira AI Support Platform
+## 📸 Application Preview
+
+<div align="center">
+
+<img src="https://github.com/user-attachments/assets/73d08ec2-d839-4c6c-9379-95c5e9dcf75a" width="48%">
+<img src="https://github.com/user-attachments/assets/01e2a6dc-6085-488b-b875-c04a983bcbd7" width="48%">
+
+<img src="https://github.com/user-attachments/assets/b6892e7d-a519-42bf-9a60-8095888070df" width="48%">
+<img src="https://github.com/user-attachments/assets/3ed9d9ae-4791-4d9a-8717-8932e2224956" width="48%">
+
+<img src="https://github.com/user-attachments/assets/c14518e3-541a-4666-b6a2-0a9663d5959b" width="48%">
+<img src="https://github.com/user-attachments/assets/a0bfe97c-90f8-40d0-ac35-f143ac09f486" width="48%">
+
+<img src="https://github.com/user-attachments/assets/5b67c9cf-e654-4ab2-bd76-1c695bbf51d9" width="70%">
+
+</div>
+
+### Mobile Experience
+
+<div align="center">
+  <img src="https://github.com/user-attachments/assets/36436d02-2ca3-4c0c-bb2c-cc0275d0578e" width="250">
+  <img src="https://github.com/user-attachments/assets/a09ba02b-1af6-4fe4-a238-5fc145c5147e" width="250">
+</div>
 
 Closira is an **AI Customer Support Platform** designed for Small and Medium Businesses (SMBs). 
 
